@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'login.dart';
 import 'forgot_password.dart';
+import 'home.dart';
 void main() {
   runApp(const TeacherApp());
 }
@@ -22,6 +23,7 @@ class TeacherApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/forgot-password': (context) => ForgotPasswordScreen(),
+        '/dashboard': (context) => const HomeScreen(),
       },
     );
   }

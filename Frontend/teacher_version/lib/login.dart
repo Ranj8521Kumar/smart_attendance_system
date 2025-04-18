@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     // Backend URL for login verification
-    var url = Uri.parse('http://your_backend_url/login');  // Replace with your backend URL
+    var url = Uri.parse('http://192.168.25.109:5000/login');  // Replace with your backend URL
 
     try {
       var response = await http.post(
@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 24),
             TextField(
               controller: emailController,
-              decoration: boxedDecoration("Email or ID"),
+              decoration: boxedDecoration("College Email"),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 20),
