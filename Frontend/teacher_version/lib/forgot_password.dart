@@ -1,13 +1,48 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
 
 class ForgotPasswordScreen extends StatelessWidget {
   final TextEditingController emailController = TextEditingController();
 
   ForgotPasswordScreen({super.key});
 
-  void handleResetPassword() {
-    // TODO: Send email/ID to backend for verification and send reset link/code
-    print("Password reset requested for: ${emailController.text}");
+  void handleResetPassword(BuildContext context) async {
+    final email = emailController.text.trim();
+
+    if (!email.endsWith('@rgipt.ac.in')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid @rgipt.ac.in email')),
+      );
+      return;
+    }
+
+    final url = Uri.parse('http://192.168.25.109:5000/forgot-password'); // Change to your IP
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(responseData['message'] ?? 'Success')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(responseData['message'] ?? 'Failed')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error connecting to server")),
+      );
+    }
   }
 
   @override
@@ -27,13 +62,13 @@ class ForgotPasswordScreen extends StatelessWidget {
             TextField(
               controller: emailController,
               decoration: const InputDecoration(
-                labelText: "College Email ",
+                labelText: "College Email",
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 30),
             ElevatedButton(
-              onPressed: handleResetPassword,
+              onPressed: () => handleResetPassword(context),
               child: const Text("Send Reset Link"),
             ),
           ],
