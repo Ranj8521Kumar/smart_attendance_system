@@ -69,18 +69,17 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
   }
 
   Future<void> _uploadImagesToServer() async {
-    final uri = Uri.parse('http://192.168.25.109:5000/upload_images'); // Update with your server IP
+    final uri = Uri.parse('http://192.168.25.109:5000/upload_images');
     final request = http.MultipartRequest('POST', uri);
     request.fields['subject'] = widget.subject;
 
     try {
       for (var image in _selectedImages) {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'images', // Key used in backend
-            image.path,
-          ),
+        var imageFile = await http.MultipartFile.fromPath(
+          'images[]', // Ensure this matches the backend's expected key
+          image.path,
         );
+        request.files.add(imageFile);  // Adding multiple images
       }
 
       final response = await request.send();
@@ -104,6 +103,7 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -191,7 +191,8 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
                   ),
                 ),
               ),
-           const SizedBox(height: 20,)
+
+            const SizedBox(height: 20),
           ],
         ),
       ),

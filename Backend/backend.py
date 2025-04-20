@@ -9,6 +9,11 @@ from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, render_template_string
 import mysql.connector
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
+from datetime import datetime
+from model.recognition import recognize_faces_in_image
+import shutil
+import uuid
 
 # Load environment variables from .env file
 load_dotenv()
@@ -363,5 +368,99 @@ def get_teacher_info():
         return jsonify({'success': False, 'message': 'An error occurred while fetching data'}), 500
 
 
+##                          Images will be uploaded on the server using this logic
+
+# Folders
+UPLOAD_FOLDER = 'Upload_Folder'
+PROCESSED_FOLDER = 'Processed_Folder'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(PROCESSED_FOLDER, exist_ok=True)
+
+# Config
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['PROCESSED_FOLDER'] = PROCESSED_FOLDER
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/upload_images', methods=['POST'])
+def upload_images():
+    subject = request.form.get('subject')
+    files = request.files.getlist('images[]')  # Multiple file input
+
+    if not subject:
+        return jsonify({'success': False, 'message': 'Subject is required'}), 400
+
+    if not files:
+        return jsonify({'success': False, 'message': 'No images uploaded'}), 400
+
+    saved_files = []
+    all_recognized_students = []
+
+    try:
+        for index, file in enumerate(files):
+            if file and allowed_file(file.filename):
+                ext = file.filename.rsplit('.', 1)[1].lower()
+                timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
+                unique_id = uuid.uuid4().hex[:6]
+                new_filename = f"{secure_filename(subject)}_{timestamp}_{index+1}_{unique_id}.{ext}"
+
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+                file.save(filepath)
+                saved_files.append(new_filename)
+
+                # Process image (face recognition)
+                recognized = recognize_faces_in_image(filepath)
+                all_recognized_students.extend(recognized)
+
+                # Move processed image to record folder
+                processed_path = os.path.join(app.config['PROCESSED_FOLDER'], new_filename)
+                shutil.move(filepath, processed_path)
+
+        return jsonify({
+            'success': True,
+            'message': f'{len(saved_files)} image(s) uploaded and processed.',
+            'files': saved_files,
+            'recognized_students': list(set(all_recognized_students))  # remove duplicates
+        }), 200
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'success': False, 'message': 'Server error occurred'}), 500
+
+
+import threading
+import time
+
+def background_image_processor():
+    print("[INFO] Background image processor started.")
+    while True:
+        try:
+            files = os.listdir(UPLOAD_FOLDER)
+            image_files = [f for f in files if allowed_file(f)]
+
+            for filename in image_files:
+                filepath = os.path.join(UPLOAD_FOLDER, filename)
+                print(f"[PROCESSING] {filename}")
+
+                recognized = recognize_faces_in_image(filepath)
+
+                # Move to processed folder
+                processed_path = os.path.join(PROCESSED_FOLDER, filename)
+                shutil.move(filepath, processed_path)
+
+                print(f"[DONE] Moved {filename} to {PROCESSED_FOLDER}. Recognized: {recognized}")
+
+        except Exception as e:
+            print(f"[ERROR in background processor]: {e}")
+
+        time.sleep(5)  # check every 5 seconds
+
+
 if __name__ == '__main__':
+    processor_thread = threading.Thread(target=background_image_processor, daemon=True)
+    processor_thread.start()
+
     app.run(host='0.0.0.0', port=5000, debug=True)
+

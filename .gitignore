@@ -1,2 +1,6 @@
 # env file contains database credentials 
 .env
+
+**/model/database/
+**/Processed_Folder/
+**/Upload_Folder/
