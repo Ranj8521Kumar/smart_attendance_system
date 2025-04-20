@@ -40,9 +40,16 @@ def login():
     conn.close()
 
     if user and check_password_hash(user['password'], password):
-        return jsonify({'success': True, 'message': 'Login successful'})
+        # Exclude password from being returned for safety
+        user.pop('password', None)
+        return jsonify({
+            'success': True,
+            'message': 'Login successful',
+            'teacher': user
+        })
     else:
         return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+
 
 @app.route('/forgot-password', methods=['POST'])
 def forgot_password():
@@ -313,6 +320,48 @@ def reset_password():
         except Exception as e:
             print("Error updating password:", e)
             return "Something went wrong while updating your password. Please try again later."
+
+
+@app.route('/teacher-info', methods=['GET'])
+def get_teacher_info():
+    teacher_id = request.args.get('teacher_id')
+
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'Teacher ID is required'}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Fetch teacher's basic information
+        cursor.execute("SELECT * FROM teachers WHERE id = %s", (teacher_id,))
+        teacher = cursor.fetchone()
+
+        if not teacher:
+            return jsonify({'success': False, 'message': 'Teacher not found'}), 404
+
+        # Fetch subjects assigned to this teacher
+        cursor.execute("SELECT subject_code FROM Teacher_subject WHERE teacher_id = %s", (teacher['id'],))
+        subjects = [row['subject_code'] for row in cursor.fetchall()]
+
+        conn.close()
+
+        # Format the response
+        response_data = {
+            'teacher': {
+                'id': teacher['id'],
+                'name': teacher['name'],
+                'email': teacher['email'],
+            },
+            'subjects': subjects
+        }
+
+        return jsonify({'success': True, 'data': response_data}), 200
+
+    except Exception as e:
+        print(f"Error fetching teacher info: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred while fetching data'}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

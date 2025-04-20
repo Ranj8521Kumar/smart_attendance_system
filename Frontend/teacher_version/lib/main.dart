@@ -3,6 +3,7 @@ import 'login.dart';
 import 'forgot_password.dart';
 import 'home.dart';
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const TeacherApp());
 }
 

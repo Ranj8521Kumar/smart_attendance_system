@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';  // For encoding data to JSON
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';  // For encoding data to JSON
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -52,6 +54,14 @@ class _LoginScreenState extends State<LoginScreen> {
         // Parse the response from backend (assuming JSON response)
         var data = json.decode(response.body);
         if (data['success']) {
+          final prefs = await SharedPreferences.getInstance();
+          String teacherId = data['teacher']['id'].toString();
+
+          // Debug print
+          print('Received teacher ID from backend: $teacherId');
+
+          await prefs.setString('teacher_id', teacherId);
+
           // Navigate to the next page (dashboard or home)
           Navigator.pushReplacementNamed(context, '/dashboard');
         } else {
