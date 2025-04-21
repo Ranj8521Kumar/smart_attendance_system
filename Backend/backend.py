@@ -16,6 +16,7 @@ import shutil
 import uuid
 import threading
 import time
+import cv2
 
 # Load environment variables from .env file
 load_dotenv()
@@ -373,13 +374,10 @@ def get_teacher_info():
 ##                          Images will be uploaded on the server using this logic
 # Folders
 UPLOAD_FOLDER = 'Upload_Folder'
-PROCESSED_FOLDER = 'Processed_Folder'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
 # Config
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['PROCESSED_FOLDER'] = PROCESSED_FOLDER
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 # Thread-safe processing queue
@@ -447,34 +445,37 @@ def background_image_processor():
                 current_file = processing_queue.popleft() if processing_queue else None
 
             if current_file:
-                # Atomic check-and-process
                 if os.path.exists(current_file):
                     try:
                         print(f"[PROCESSING] {os.path.basename(current_file)}")
-                        
-                        # Process image
-                        recognized = recognize_faces_in_image(current_file)
-                        
-                        # Move to processed folder
-                        new_path = os.path.join(
-                            app.config['PROCESSED_FOLDER'],
-                            os.path.basename(current_file)
-                        )
-                        shutil.move(current_file, new_path)
+
+                        # Process image and get tagged version
+                        recognized, tagged_image = recognize_faces_in_image(current_file)
+
+                        # Save tagged image
+                        filename = os.path.basename(current_file)
+                        attendance_path = os.path.join("Attendance_Records", filename)
+                        os.makedirs(os.path.dirname(attendance_path), exist_ok=True)
+                        cv2.imwrite(attendance_path, tagged_image)
+
+                        # Delete original
+                        os.remove(current_file)
+
                         print(f"[DONE] Processed {os.path.basename(current_file)}. Recognized: {recognized}")
+
                     except FileNotFoundError:
                         print(f"[WARNING] File disappeared during processing: {os.path.basename(current_file)}")
                 else:
                     print(f"[SKIPPING] Missing file: {os.path.basename(current_file)}")
 
-            time.sleep(0.5)  # Reduce CPU usage
+            time.sleep(0.5)
 
         except IndexError:
-            # Queue is empty
             time.sleep(1)
         except Exception as e:
             print(f"[PROCESSOR ERROR] {str(e)}")
             time.sleep(5)
+
 
 
 
