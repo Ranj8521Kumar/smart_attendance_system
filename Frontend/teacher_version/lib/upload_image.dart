@@ -15,6 +15,8 @@ class SubjectUploadPage extends StatefulWidget {
 
 class _SubjectUploadPageState extends State<SubjectUploadPage> {
   List<File> _selectedImages = [];
+  List<double> _uploadProgress = [];
+  bool _isUploading = false;
 
   void _showPickerOptions() {
     showModalBottomSheet(
@@ -51,6 +53,7 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
     if (pickedImage != null) {
       setState(() {
         _selectedImages.add(File(pickedImage.path));
+        _uploadProgress.add(0.0);
       });
     }
   }
@@ -63,47 +66,89 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
 
     if (result != null && result.files.isNotEmpty) {
       setState(() {
-        _selectedImages.addAll(result.files.map((f) => File(f.path!)));
+        for (var file in result.files) {
+          _selectedImages.add(File(file.path!));
+          _uploadProgress.add(0.0);
+        }
       });
     }
   }
 
   Future<void> _uploadImagesToServer() async {
-    final uri = Uri.parse('http://192.168.25.109:5000/upload_images');
-    final request = http.MultipartRequest('POST', uri);
-    request.fields['subject'] = widget.subject;
+    setState(() {
+      _isUploading = true;
+    });
 
-    try {
-      for (var image in _selectedImages) {
-        var imageFile = await http.MultipartFile.fromPath(
-          'images[]', // Ensure this matches the backend's expected key
-          image.path,
-        );
-        request.files.add(imageFile);  // Adding multiple images
-      }
+    final uri = Uri.parse('http://192.168.24.54:5000/upload_images');
 
-      final response = await request.send();
+    for (int i = 0; i < _selectedImages.length; i++) {
+      var request = http.MultipartRequest('POST', uri);
+      request.fields['subject'] = widget.subject;
 
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Images uploaded successfully!')),
-        );
-        setState(() {
-          _selectedImages.clear();
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed. Try again.')),
-        );
-      }
-    } catch (e) {
-      print('Upload error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Something went wrong.')),
+      var imageFile = await http.MultipartFile.fromPath('images[]', _selectedImages[i].path);
+      request.files.add(imageFile);
+
+      var streamedResponse = await request.send();
+
+      streamedResponse.stream.listen(
+            (value) {
+          setState(() {
+            _uploadProgress[i] += value.length / streamedResponse.contentLength!;
+          });
+        },
+        onDone: () async {
+          if (streamedResponse.statusCode == 200) {
+            setState(() {
+              _uploadProgress[i] = 1.0;
+            });
+            if (i == _selectedImages.length - 1) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Images uploaded successfully!')),
+              );
+              setState(() {
+                _selectedImages.clear();
+                _uploadProgress.clear();
+                _isUploading = false;
+              });
+            }
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload failed for image ${i + 1}.')),
+            );
+            setState(() {
+              _isUploading = false;
+            });
+          }
+        },
+        onError: (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error uploading image ${i + 1}.')),
+          );
+          setState(() {
+            _isUploading = false;
+          });
+        },
       );
     }
   }
 
+  void _previewImage(File imageFile) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        child: InteractiveViewer(
+          child: Image.file(imageFile),
+        ),
+      ),
+    );
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _selectedImages.removeAt(index);
+      _uploadProgress.removeAt(index);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,8 +161,6 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-
-            // Subject text
             Text(
               subjectText,
               style: TextStyle(
@@ -127,20 +170,13 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
               ),
               textAlign: TextAlign.center,
             ),
-
             const SizedBox(height: 200),
-
-            // Upload icon and prompt
             Center(
               child: GestureDetector(
                 onTap: _showPickerOptions,
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.cloud_upload_outlined,
-                      size: 100,
-                      color: Colors.blueAccent,
-                    ),
+                    Icon(Icons.cloud_upload_outlined, size: 100, color: Colors.blueAccent),
                     const SizedBox(height: 8),
                     Text(
                       "Upload classroom images",
@@ -154,10 +190,7 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 30),
-
-            // Image previews
             if (_selectedImages.isNotEmpty)
               Expanded(
                 child: GridView.builder(
@@ -168,30 +201,69 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
                     mainAxisSpacing: 10,
                   ),
                   itemCount: _selectedImages.length,
-                  itemBuilder: (ctx, i) => Image.file(
-                    _selectedImages[i],
-                    fit: BoxFit.cover,
+                  itemBuilder: (ctx, i) => Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: () => _previewImage(_selectedImages[i]),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            image: DecorationImage(
+                              image: FileImage(_selectedImages[i]),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: () => _removeImage(i),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.close, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ),
+                      if (_isUploading)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: LinearProgressIndicator(
+                            value: _uploadProgress[i],
+                            backgroundColor: Colors.black12,
+                            color: Colors.blueAccent,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-
             const SizedBox(height: 10),
-
-            // Upload button
             if (_selectedImages.isNotEmpty)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _uploadImagesToServer,
-                  icon: Icon(Icons.cloud_done_outlined),
-                  label: Text("Upload"),
+                  onPressed: _isUploading ? null : _uploadImagesToServer,
+                  icon: _isUploading
+                      ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                      : Icon(Icons.cloud_done_outlined),
+                  label: Text(_isUploading ? "Uploading..." : "Upload"),
                   style: ElevatedButton.styleFrom(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     textStyle: TextStyle(fontSize: 16),
                   ),
                 ),
               ),
-
             const SizedBox(height: 20),
           ],
         ),

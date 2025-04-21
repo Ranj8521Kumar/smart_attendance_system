@@ -35,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     // Backend URL for login verification
-    var url = Uri.parse('http://192.168.25.109:5000/login');  // Replace with your backend URL
+    var url = Uri.parse('http://192.168.24.54:5000/login');  // Replace with your backend URL
 
     try {
       var response = await http.post(

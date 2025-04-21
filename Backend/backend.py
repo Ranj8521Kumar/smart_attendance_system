@@ -14,6 +14,8 @@ from datetime import datetime
 from model.recognition import recognize_faces_in_image
 import shutil
 import uuid
+import threading
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -369,7 +371,6 @@ def get_teacher_info():
 
 
 ##                          Images will be uploaded on the server using this logic
-
 # Folders
 UPLOAD_FOLDER = 'Upload_Folder'
 PROCESSED_FOLDER = 'Processed_Folder'
@@ -381,13 +382,18 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['PROCESSED_FOLDER'] = PROCESSED_FOLDER
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
+# Thread-safe processing queue
+from collections import deque
+processing_queue = deque()
+queue_lock = threading.Lock()
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/upload_images', methods=['POST'])
 def upload_images():
     subject = request.form.get('subject')
-    files = request.files.getlist('images[]')  # Multiple file input
+    files = request.files.getlist('images[]')
 
     if not subject:
         return jsonify({'success': False, 'message': 'Subject is required'}), 400
@@ -396,71 +402,86 @@ def upload_images():
         return jsonify({'success': False, 'message': 'No images uploaded'}), 400
 
     saved_files = []
-    all_recognized_students = []
 
     try:
         for index, file in enumerate(files):
             if file and allowed_file(file.filename):
+                # Generate more unique filename
                 ext = file.filename.rsplit('.', 1)[1].lower()
-                timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S')
-                unique_id = uuid.uuid4().hex[:6]
+                timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')  # Add microseconds
+                unique_id = uuid.uuid4().hex[:10]  # Increased uniqueness
                 new_filename = f"{secure_filename(subject)}_{timestamp}_{index+1}_{unique_id}.{ext}"
-
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
-                file.save(filepath)
+                
+                # Save to upload folder
+                upload_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+                file.save(upload_path)
                 saved_files.append(new_filename)
 
-                # Process image (face recognition)
-                recognized = recognize_faces_in_image(filepath)
-                all_recognized_students.extend(recognized)
-
-                # Move processed image to record folder
-                processed_path = os.path.join(app.config['PROCESSED_FOLDER'], new_filename)
-                shutil.move(filepath, processed_path)
+                # Add to processing queue
+                with queue_lock:
+                    if upload_path not in processing_queue:  # Prevent duplicates
+                        processing_queue.append(upload_path)
 
         return jsonify({
             'success': True,
-            'message': f'{len(saved_files)} image(s) uploaded and processed.',
-            'files': saved_files,
-            'recognized_students': list(set(all_recognized_students))  # remove duplicates
+            'message': f'{len(saved_files)} image(s) uploaded. Processing started.',
+            'files': saved_files
         }), 200
 
     except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'success': False, 'message': 'Server error occurred'}), 500
-
-
-import threading
-import time
+        # Cleanup any partially uploaded files
+        for f in saved_files:
+            temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f)
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        
+        app.logger.error(f"Upload error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Upload failed'}), 500
 
 def background_image_processor():
-    print("[INFO] Background image processor started.")
+    print("[INFO] Background processor started")
     while True:
         try:
-            files = os.listdir(UPLOAD_FOLDER)
-            image_files = [f for f in files if allowed_file(f)]
+            # Get next file to process
+            with queue_lock:
+                current_file = processing_queue.popleft() if processing_queue else None
 
-            for filename in image_files:
-                filepath = os.path.join(UPLOAD_FOLDER, filename)
-                print(f"[PROCESSING] {filename}")
+            if current_file:
+                # Atomic check-and-process
+                if os.path.exists(current_file):
+                    try:
+                        print(f"[PROCESSING] {os.path.basename(current_file)}")
+                        
+                        # Process image
+                        recognized = recognize_faces_in_image(current_file)
+                        
+                        # Move to processed folder
+                        new_path = os.path.join(
+                            app.config['PROCESSED_FOLDER'],
+                            os.path.basename(current_file)
+                        )
+                        shutil.move(current_file, new_path)
+                        print(f"[DONE] Processed {os.path.basename(current_file)}. Recognized: {recognized}")
+                    except FileNotFoundError:
+                        print(f"[WARNING] File disappeared during processing: {os.path.basename(current_file)}")
+                else:
+                    print(f"[SKIPPING] Missing file: {os.path.basename(current_file)}")
 
-                recognized = recognize_faces_in_image(filepath)
+            time.sleep(0.5)  # Reduce CPU usage
 
-                # Move to processed folder
-                processed_path = os.path.join(PROCESSED_FOLDER, filename)
-                shutil.move(filepath, processed_path)
-
-                print(f"[DONE] Moved {filename} to {PROCESSED_FOLDER}. Recognized: {recognized}")
-
+        except IndexError:
+            # Queue is empty
+            time.sleep(1)
         except Exception as e:
-            print(f"[ERROR in background processor]: {e}")
+            print(f"[PROCESSOR ERROR] {str(e)}")
+            time.sleep(5)
 
-        time.sleep(5)  # check every 5 seconds
 
 
 if __name__ == '__main__':
+    # Start background processor
     processor_thread = threading.Thread(target=background_image_processor, daemon=True)
     processor_thread.start()
-
-    app.run(host='0.0.0.0', port=5000, debug=True)
-
+    
+    # Start Flask app
+    app.run(host='0.0.0.0', port=5000, debug=False)

@@ -18,7 +18,7 @@ class ForgotPasswordScreen extends StatelessWidget {
       return;
     }
 
-    final url = Uri.parse('http://192.168.25.109:5000/forgot-password'); // Change to your IP
+    final url = Uri.parse('http://192.168.24.54:5000/forgot-password'); // Change to your IP
 
     try {
       final response = await http.post(
