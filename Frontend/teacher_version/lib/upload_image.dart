@@ -79,7 +79,7 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
       _isUploading = true;
     });
 
-    final uri = Uri.parse('http://192.168.24.54:5000/upload_images');
+    final uri = Uri.parse('http://192.168.31.223:5000/upload_images');
 
     for (int i = 0; i < _selectedImages.length; i++) {
       var request = http.MultipartRequest('POST', uri);

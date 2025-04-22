@@ -17,6 +17,8 @@ import uuid
 import threading
 import time
 import cv2
+from attendance_update import handle_attendance_update
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -436,6 +438,18 @@ def upload_images():
         app.logger.error(f"Upload error: {str(e)}")
         return jsonify({'success': False, 'message': 'Upload failed'}), 500
 
+
+
+def extract_subject_from_filename(filename):
+    """
+    Extracts the subject code from the filename.
+    Assumes the subject code is the first part of the filename, before the first underscore.
+    Example: 'CS101_image_12345.jpg' -> 'CS101'
+    """
+    subject_code = filename.split('_')[0]  # Split by underscore and take the first part
+    return subject_code
+
+
 def background_image_processor():
     print("[INFO] Background processor started")
     while True:
@@ -458,7 +472,14 @@ def background_image_processor():
                         os.makedirs(os.path.dirname(attendance_path), exist_ok=True)
                         cv2.imwrite(attendance_path, tagged_image)
 
-                        # Delete original
+                        # Handle attendance update
+                        subject_code = extract_subject_from_filename(filename)  # Assume a method to extract subject from filename
+                        current_date = datetime.today().strftime('%d-%m-%Y')   # Change date format to ddmmyyyy
+                        print(f"Subject Code = {subject_code}")
+                        print(f"Date = {current_date}")
+                        handle_attendance_update(recognized, subject_code, current_date)
+
+                        # Delete original image
                         os.remove(current_file)
 
                         print(f"[DONE] Processed {os.path.basename(current_file)}. Recognized: {recognized}")
@@ -475,8 +496,6 @@ def background_image_processor():
         except Exception as e:
             print(f"[PROCESSOR ERROR] {str(e)}")
             time.sleep(5)
-
-
 
 
 if __name__ == '__main__':

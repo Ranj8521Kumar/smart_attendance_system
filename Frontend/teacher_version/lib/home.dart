@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://192.168.24.54:5000/teacher-info?teacher_id=$teacherId'),
+        Uri.parse('http://192.168.31.223:5000/teacher-info?teacher_id=$teacherId'),
       );
 
       if (response.statusCode == 200) {
