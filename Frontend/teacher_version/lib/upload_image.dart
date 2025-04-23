@@ -3,17 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-class SubjectUploadPage extends StatefulWidget {
-  final String subject;
+class ImageUploadPage extends StatefulWidget {
+  final String subjectCode;
+  final String subjectName;
 
-  const SubjectUploadPage({Key? key, required this.subject}) : super(key: key);
+  const ImageUploadPage({
+    Key? key,
+    required this.subjectCode,
+    required this.subjectName,
+  }) : super(key: key);
 
   @override
-  _SubjectUploadPageState createState() => _SubjectUploadPageState();
+  _ImageUploadPageState createState() => _ImageUploadPageState();
 }
 
-class _SubjectUploadPageState extends State<SubjectUploadPage> {
+class _ImageUploadPageState extends State<ImageUploadPage> {
   List<File> _selectedImages = [];
   List<double> _uploadProgress = [];
   bool _isUploading = false;
@@ -75,60 +81,76 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
   }
 
   Future<void> _uploadImagesToServer() async {
+    final serverUrl = dotenv.env['SERVER_URL'] ?? '';
     setState(() {
       _isUploading = true;
     });
 
-    final uri = Uri.parse('http://192.168.31.223:5000/upload_images');
+    final uri = Uri.parse('$serverUrl/upload_images');
 
     for (int i = 0; i < _selectedImages.length; i++) {
       var request = http.MultipartRequest('POST', uri);
-      request.fields['subject'] = widget.subject;
+      request.fields['subjectCode'] = widget.subjectCode;
+      request.fields['subjectName'] = widget.subjectName;
 
-      var imageFile = await http.MultipartFile.fromPath('images[]', _selectedImages[i].path);
-      request.files.add(imageFile);
+      try {
+        var imageFile = await http.MultipartFile.fromPath('images[]', _selectedImages[i].path);
+        request.files.add(imageFile);
 
-      var streamedResponse = await request.send();
+        var streamedResponse = await request.send();
 
-      streamedResponse.stream.listen(
-            (value) {
-          setState(() {
-            _uploadProgress[i] += value.length / streamedResponse.contentLength!;
-          });
-        },
-        onDone: () async {
-          if (streamedResponse.statusCode == 200) {
+        streamedResponse.stream.listen(
+              (value) {
             setState(() {
-              _uploadProgress[i] = 1.0;
+              _uploadProgress[i] += streamedResponse.contentLength != null
+                  ? value.length / streamedResponse.contentLength!
+                  : 0.0;
             });
-            if (i == _selectedImages.length - 1) {
+          },
+          onDone: () async {
+            if (streamedResponse.statusCode == 200) {
+              setState(() {
+                _uploadProgress[i] = 1.0;
+              });
+              if (i == _selectedImages.length - 1) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Images uploaded successfully!')),
+                );
+                setState(() {
+                  _selectedImages.clear();
+                  _uploadProgress.clear();
+                  _isUploading = false;
+                });
+              }
+            } else {
+              final responseBody = await streamedResponse.stream.bytesToString();
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Images uploaded successfully!')),
+                SnackBar(content: Text('Upload failed for image ${i + 1}.')),
               );
               setState(() {
-                _selectedImages.clear();
-                _uploadProgress.clear();
                 _isUploading = false;
               });
             }
-          } else {
+          },
+          onError: (e) {
+            print("Error uploading image ${i + 1}: $e");
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Upload failed for image ${i + 1}.')),
+              SnackBar(content: Text('Error uploading image ${i + 1}.')),
             );
             setState(() {
               _isUploading = false;
             });
-          }
-        },
-        onError: (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error uploading image ${i + 1}.')),
-          );
-          setState(() {
-            _isUploading = false;
-          });
-        },
-      );
+          },
+        );
+      } catch (e) {
+        print("Error with image ${i + 1}: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading image ${i + 1}.')),
+        );
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
@@ -152,24 +174,13 @@ class _SubjectUploadPageState extends State<SubjectUploadPage> {
 
   @override
   Widget build(BuildContext context) {
-    final subjectText = "Subject: ${widget.subject}";
-
     return Scaffold(
-      appBar: AppBar(title: Text("Upload Images")),
+      // No AppBar here
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
           children: [
             const SizedBox(height: 20),
-            Text(
-              subjectText,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
             const SizedBox(height: 200),
             Center(
               child: GestureDetector(

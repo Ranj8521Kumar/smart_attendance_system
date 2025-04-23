@@ -18,12 +18,18 @@ import threading
 import time
 import cv2
 from attendance_update import handle_attendance_update
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+
+
 
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
+
 
 # MySQL Connection using env variables
 def get_db_connection():
@@ -350,9 +356,15 @@ def get_teacher_info():
         if not teacher:
             return jsonify({'success': False, 'message': 'Teacher not found'}), 404
 
-        # Fetch subjects assigned to this teacher
-        cursor.execute("SELECT subject_code FROM Teacher_subject WHERE teacher_id = %s", (teacher['id'],))
-        subjects = [row['subject_code'] for row in cursor.fetchall()]
+        # Fetch subjects assigned to this teacher (subject_code and subject_name)
+        cursor.execute("""
+            SELECT s.sub_code, s.sub_name
+            FROM Teacher_Subject ts
+            JOIN Subjects s ON ts.subject_code = s.sub_code
+            WHERE ts.teacher_id = %s
+        """, (teacher['id'],))
+        
+        subjects = cursor.fetchall()
 
         conn.close()
 
@@ -363,7 +375,7 @@ def get_teacher_info():
                 'name': teacher['name'],
                 'email': teacher['email'],
             },
-            'subjects': subjects
+            'subjects': subjects  # Now we send both code and name
         }
 
         return jsonify({'success': True, 'data': response_data}), 200
@@ -371,6 +383,7 @@ def get_teacher_info():
     except Exception as e:
         print(f"Error fetching teacher info: {e}")
         return jsonify({'success': False, 'message': 'An error occurred while fetching data'}), 500
+
 
 
 ##                          Images will be uploaded on the server using this logic
@@ -392,13 +405,19 @@ def allowed_file(filename):
 
 @app.route('/upload_images', methods=['POST'])
 def upload_images():
-    subject = request.form.get('subject')
+    subject = request.form.get('subjectCode')
     files = request.files.getlist('images[]')
 
+    # Debugging: Log the subject and received files
+    app.logger.debug(f"Received subjectCode: {subject}")
+    app.logger.debug(f"Received files: {[file.filename for file in files]}")
+
     if not subject:
+        app.logger.warning("Subject code is missing.")
         return jsonify({'success': False, 'message': 'Subject is required'}), 400
 
     if not files:
+        app.logger.warning("No files uploaded.")
         return jsonify({'success': False, 'message': 'No images uploaded'}), 400
 
     saved_files = []
@@ -406,12 +425,12 @@ def upload_images():
     try:
         for index, file in enumerate(files):
             if file and allowed_file(file.filename):
-                # Generate more unique filename
+                # Generate a unique filename with more security
                 ext = file.filename.rsplit('.', 1)[1].lower()
-                timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')  # Add microseconds
-                unique_id = uuid.uuid4().hex[:10]  # Increased uniqueness
+                timestamp = datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')  # Add microseconds for uniqueness
+                unique_id = uuid.uuid4().hex[:10]  # Shortened UUID for uniqueness
                 new_filename = f"{secure_filename(subject)}_{timestamp}_{index+1}_{unique_id}.{ext}"
-                
+
                 # Save to upload folder
                 upload_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
                 file.save(upload_path)
@@ -422,6 +441,12 @@ def upload_images():
                     if upload_path not in processing_queue:  # Prevent duplicates
                         processing_queue.append(upload_path)
 
+                # Debugging: Log the saved file path
+                app.logger.debug(f"Saved file: {new_filename} to path: {upload_path}")
+            else:
+                app.logger.warning(f"File {file.filename} is not allowed or invalid.")
+
+        # If all files are uploaded successfully, respond with success
         return jsonify({
             'success': True,
             'message': f'{len(saved_files)} image(s) uploaded. Processing started.',
@@ -434,11 +459,11 @@ def upload_images():
             temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f)
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-        
+
+        # Log the error for debugging
         app.logger.error(f"Upload error: {str(e)}")
+
         return jsonify({'success': False, 'message': 'Upload failed'}), 500
-
-
 
 def extract_subject_from_filename(filename):
     """
@@ -448,7 +473,6 @@ def extract_subject_from_filename(filename):
     """
     subject_code = filename.split('_')[0]  # Split by underscore and take the first part
     return subject_code
-
 
 def background_image_processor():
     print("[INFO] Background processor started")
@@ -498,6 +522,69 @@ def background_image_processor():
             time.sleep(5)
 
 
+@app.route('/get_attendance', methods=['GET'])
+def get_attendance():
+    subject_code = request.args.get('subjectCode')
+    date = request.args.get('date')  # format: dd-mm-yyyy
+    formatted_date = date.replace('-', '_')  # match file naming convention
+
+    if not subject_code or not date:
+        return jsonify({'success': False, 'message': 'Subject code and date are required'}), 400
+
+    table_name = f"Attendance_{subject_code}"
+    image_prefix = f"{subject_code}_{date}_"
+    image_folder = 'Attendance_Records'
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if table exists
+        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        if not cursor.fetchone():
+            return jsonify({'success': False, 'message': f"Table {table_name} not found."}), 404
+
+        # Check if date column exists
+        cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE '{formatted_date}'")
+        if not cursor.fetchone():
+            return jsonify({'success': False, 'message': f"Column for date {date} not found."}), 404
+
+        # Fetch all students
+        cursor.execute(f"SELECT rollno FROM {table_name}")
+        all_students = [row[0] for row in cursor.fetchall()]
+
+        # Fetch present students
+        cursor.execute(f"SELECT rollno FROM {table_name} WHERE `{date}` = 1")
+        present_students = [row[0] for row in cursor.fetchall()]
+
+        # Fetch image filenames
+        tagged_images = [
+            f for f in os.listdir(image_folder)
+            if f.startswith(image_prefix) and f.lower().endswith(('.jpg', '.jpeg', '.png'))
+        ]
+
+        return jsonify({
+            'success': True,
+            'data': present_students,
+            'all': all_students,
+            'tagged_images': tagged_images
+        }), 200
+
+    except mysql.connector.Error as err:
+        app.logger.error(f"Database error: {err}")
+        return jsonify({'success': False, 'message': 'Database error occurred'}), 500
+    except Exception as e:
+        app.logger.error(f"Unexpected error: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+        
+@app.route('/Attendance_Records/<filename>')
+def serve_tagged_image(filename):
+    return send_from_directory('Attendance_Records', filename)
+        
+        
 if __name__ == '__main__':
     # Start background processor
     processor_thread = threading.Thread(target=background_image_processor, daemon=True)

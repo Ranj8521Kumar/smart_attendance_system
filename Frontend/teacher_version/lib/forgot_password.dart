@@ -1,14 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ForgotPasswordScreen extends StatelessWidget {
   final TextEditingController emailController = TextEditingController();
 
   ForgotPasswordScreen({super.key});
 
+
+
   void handleResetPassword(BuildContext context) async {
+    final serverUrl = dotenv.env['SERVER_URL'] ?? '';
     final email = emailController.text.trim();
 
     if (!email.endsWith('@rgipt.ac.in')) {
@@ -18,7 +21,7 @@ class ForgotPasswordScreen extends StatelessWidget {
       return;
     }
 
-    final url = Uri.parse('http://192.168.31.223:5000/forgot-password'); // Change to your IP
+    final url = Uri.parse('$serverUrl/forgot-password'); // Change to your IP
 
     try {
       final response = await http.post(

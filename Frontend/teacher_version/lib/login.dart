@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';  // For encoding data to JSON
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -17,12 +17,11 @@ class _LoginScreenState extends State<LoginScreen> {
   String errorMessage = '';
   bool isLoading = false;
 
-  // Function to login the teacher
   Future<void> loginTeacher() async {
-    String email = emailController.text;
+    final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+    String email = emailController.text.trim();
     String password = passwordController.text;
 
-    // Check if the email ends with '@rgipt.ac.in'
     if (!email.endsWith('@rgipt.ac.in')) {
       setState(() {
         errorMessage = 'Please enter a valid RGIPT email address.';
@@ -30,125 +29,142 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() {
-      isLoading = true;
-    });
-
-    // Backend URL for login verification
-    var url = Uri.parse('http://192.168.31.223:5000/login');  // Replace with your backend URL
+    setState(() => isLoading = true);
 
     try {
       var response = await http.post(
-        url,
-        body: json.encode({
-          'email': email,
-          'password': password,
-        }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        Uri.parse('$serverUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'email': email, 'password': password}),
       );
 
-      // Check if the login was successful
-      if (response.statusCode == 200) {
-        // Parse the response from backend (assuming JSON response)
-        var data = json.decode(response.body);
-        if (data['success']) {
-          final prefs = await SharedPreferences.getInstance();
-          String teacherId = data['teacher']['id'].toString();
-
-          // Debug print
-          print('Received teacher ID from backend: $teacherId');
-
-          await prefs.setString('teacher_id', teacherId);
-
-          // Navigate to the next page (dashboard or home)
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        } else {
-          // Show error message if login fails
-          setState(() {
-            errorMessage = data['message'] ?? 'Login failed. Please check your credentials.';
-          });
-        }
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success']) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('teacher_id', data['teacher']['id'].toString());
+        Navigator.pushReplacementNamed(context, '/dashboard');
       } else {
         setState(() {
-          errorMessage = 'Error: ${response.statusCode}. Please try again.';
+          errorMessage = data['message'] ?? 'Login failed. Please try again.';
         });
       }
     } catch (e) {
       setState(() {
-        errorMessage = 'Error: $e. Please try again.';
+        errorMessage = 'Error: $e';
       });
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
     }
   }
 
-  InputDecoration boxedDecoration(String label) {
+  InputDecoration customInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
+      filled: true,
+      fillColor: Colors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeColor = Colors.blueAccent;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Teacher Login")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 24),
-            TextField(
-              controller: emailController,
-              decoration: boxedDecoration("College Email"),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: passwordController,
-              decoration: boxedDecoration("Password"),
-              obscureText: true,
-            ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/forgot-password');
-                },
-                child: const Text("Forgot Password?"),
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (errorMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Text(
-                  errorMessage,
-                  style: const TextStyle(color: Colors.red, fontSize: 14),
+      backgroundColor: themeColor.shade100,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: screenWidth * 0.06, // 6% of the screen width
+            vertical: screenHeight * 0.04,  // 4% of the screen height
+          ),
+          child: Container(
+            padding: EdgeInsets.all(screenWidth * 0.06), // 6% of the screen width
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: themeColor.withOpacity(0.3),
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
                 ),
-              ),
-            isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : ElevatedButton(
-                    onPressed: loginTeacher,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline, size: screenWidth * 0.15, color: themeColor),
+                const SizedBox(height: 12),
+                Text(
+                  'Teacher Login',
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.06,  // 6% of the screen width
+                    fontWeight: FontWeight.bold,
+                    color: themeColor.shade700,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: emailController,
+                  decoration: customInputDecoration("College Email"),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: passwordController,
+                  decoration: customInputDecoration("Password"),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
+                    child: const Text("Forgot Password?"),
+                  ),
+                ),
+                if (errorMessage.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      errorMessage,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : loginTeacher,
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: themeColor,
+                      padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02), // 2% of screen height
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text("Login"),
+                    child: isLoading
+                        ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                        : const Text("Login", style: TextStyle(fontSize: 16)),
                   ),
-          ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
