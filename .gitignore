@@ -2,5 +2,5 @@
 .env
 
 **/model/database/
-**/Processed_Folder/
 **/Upload_Folder/
+**/Attendance_Records/
