@@ -12,7 +12,6 @@ from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from model.recognition import recognize_faces_in_image
-import shutil
 import uuid
 import threading
 import time
@@ -20,6 +19,7 @@ import cv2
 from attendance_update import handle_attendance_update
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+import re
 
 
 
@@ -28,7 +28,7 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/get_attendance": {"origins": "*"}, r"/Attendance_Records/*": {"origins": "*"}})
 
 
 # MySQL Connection using env variables
@@ -522,42 +522,51 @@ def background_image_processor():
             time.sleep(5)
 
 
+def validate_input(subject_code, date):
+    """Validate subject code and date format"""
+    if not re.match(r'^[A-Z0-9_]+$', subject_code):
+        return False, "Invalid subject code format"
+    if not re.match(r'^\d{2}-\d{2}-\d{4}$', date):
+        return False, "Invalid date format (dd-mm-yyyy)"
+    return True, ""
+
 @app.route('/get_attendance', methods=['GET'])
 def get_attendance():
     subject_code = request.args.get('subjectCode')
-    date = request.args.get('date')  # format: dd-mm-yyyy
-    formatted_date = date.replace('-', '_')  # match file naming convention
-
-    if not subject_code or not date:
-        return jsonify({'success': False, 'message': 'Subject code and date are required'}), 400
+    date = request.args.get('date')  # Expected format: dd-mm-yyyy
+    
+    # Input validation
+    is_valid, message = validate_input(subject_code, date)
+    if not is_valid:
+        return jsonify({'success': False, 'message': message}), 400
 
     table_name = f"Attendance_{subject_code}"
     image_prefix = f"{subject_code}_{date}_"
-    image_folder = 'Attendance_Records'
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Check if table exists
+        # Verify table exists
         cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
         if not cursor.fetchone():
-            return jsonify({'success': False, 'message': f"Table {table_name} not found."}), 404
+            return jsonify({'success': False, 'message': 'Subject not found'}), 404
 
-        # Check if date column exists
-        cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE '{formatted_date}'")
+        # Verify date column exists
+        cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE %s", (date,))
         if not cursor.fetchone():
-            return jsonify({'success': False, 'message': f"Column for date {date} not found."}), 404
+            return jsonify({'success': False, 'message': 'Date not found in records'}), 404
 
-        # Fetch all students
+        # Get all students
         cursor.execute(f"SELECT rollno FROM {table_name}")
         all_students = [row[0] for row in cursor.fetchall()]
 
-        # Fetch present students
+        # Get present students
         cursor.execute(f"SELECT rollno FROM {table_name} WHERE `{date}` = 1")
         present_students = [row[0] for row in cursor.fetchall()]
 
-        # Fetch image filenames
+        # Get tagged images
+        image_folder = 'Attendance_Records'
         tagged_images = [
             f for f in os.listdir(image_folder)
             if f.startswith(image_prefix) and f.lower().endswith(('.jpg', '.jpeg', '.png'))
@@ -572,18 +581,19 @@ def get_attendance():
 
     except mysql.connector.Error as err:
         app.logger.error(f"Database error: {err}")
-        return jsonify({'success': False, 'message': 'Database error occurred'}), 500
+        return jsonify({'success': False, 'message': 'Database operation failed'}), 500
     except Exception as e:
         app.logger.error(f"Unexpected error: {e}")
-        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+        return jsonify({'success': False, 'message': 'Server processing error'}), 500
     finally:
-        cursor.close()
-        conn.close()
-        
-@app.route('/Attendance_Records/<filename>')
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/Attendance_Records/<path:filename>')
 def serve_tagged_image(filename):
     return send_from_directory('Attendance_Records', filename)
-        
         
 if __name__ == '__main__':
     # Start background processor
