@@ -20,16 +20,23 @@ from attendance_update import handle_attendance_update
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import re
-
+from itsdangerous import URLSafeTimedSerializer
 
 
 
 # Load environment variables from .env file
 load_dotenv()
 
+# Retrieve the values from the environment
+SECRET_KEY = os.getenv('SECRET_KEY')
+SECURITY_SALT = os.getenv('SECURITY_SALT')
+server_url = os.getenv('SERVER_URL')
+
 app = Flask(__name__)
 CORS(app, resources={r"/get_attendance": {"origins": "*"}, r"/Attendance_Records/*": {"origins": "*"}})
 
+# Set the secret key for Flask
+app.config['SECRET_KEY'] = SECRET_KEY
 
 # MySQL Connection using env variables
 def get_db_connection():
@@ -46,18 +53,21 @@ def login():
     email = data['email']
     password = data['password']
 
-    if not email.endswith('@rgipt.ac.in'):
-        return jsonify({'success': False, 'message': 'Email must end with @rgipt.ac.in'}), 400
+    # Email validation with regex for better security
+    if not re.match(r"[^@]+@rgipt.ac.in", email):
+        return jsonify({'success': False, 'message': 'Email must end with @rgipt.ac.in and be in a valid format'}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM teachers WHERE email = %s", (email,))
-    user = cursor.fetchone()
-    conn.close()
+    # Database query and password check
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM teachers WHERE email = %s", (email,))
+        user = cursor.fetchone()
+    finally:
+        conn.close()  # Ensure connection is closed after the query
 
     if user and check_password_hash(user['password'], password):
-        # Exclude password from being returned for safety
-        user.pop('password', None)
+        user.pop('password', None)  # Remove password from the response
         return jsonify({
             'success': True,
             'message': 'Login successful',
@@ -72,14 +82,22 @@ def forgot_password():
     data = request.get_json()
     email = data.get('email')
 
+    # Ensure email is provided
     if not email:
         return jsonify({'success': False, 'message': 'Email is required'}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM teachers WHERE email = %s", (email,))
-    user = cursor.fetchone()
-    conn.close()
+    # Validate email format
+    if not re.match(r"[^@]+@rgipt.ac.in", email):
+        return jsonify({'success': False, 'message': 'Email must end with @rgipt.ac.in and be in a valid format'}), 400
+
+    # Check if email exists in the database
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM teachers WHERE email = %s", (email,))
+        user = cursor.fetchone()
+    finally:
+        conn.close()  # Ensure connection is closed after the query
 
     if user:
         try:
@@ -90,25 +108,28 @@ def forgot_password():
             return jsonify({'success': False, 'message': 'Failed to send email'}), 500
     else:
         return jsonify({'success': False, 'message': 'Email not found'}), 404
+    
+    
 
+
+SENDER_EMAIL = os.getenv('EMAIL_USER')
+EMAIL_PASSWORD = os.getenv('EMAIL_PASS')
 
 def send_reset_email(to_email):
-    sender = os.getenv('EMAIL_USER')
-    password = os.getenv('EMAIL_PASS')
-    
-    
-
     subject = "Reset Your Smart Attendance Password"
     
-    reset_link = f"http://192.168.25.109:5000/reset-password?email={to_email}"  # Replace with your app link
-    
-    # HTML email body
+    # 🔐 Generate secure token and reset link
+    token = generate_reset_token(to_email)
+    reset_link = f"{server_url}/reset-password/{token}"  # Secure tokenized link
+
+    # ✉️ HTML email body
     body = f"""
     <html>
         <body>
             <p>Hi,</p>
             <p>You requested a password reset for your Smart Attendance account.</p>
             <p>Click the link below to <a href="{reset_link}">Reset your password</a>.</p>
+            <p>This link will expire in 1 hour for your security.</p>
             <p>If you didn’t request this, please ignore this email.</p>
             <p>Regards,<br>Smart Attendance Team</p>
         </body>
@@ -116,19 +137,37 @@ def send_reset_email(to_email):
     """
 
     msg = MIMEMultipart()
-    msg['From'] = sender
+    msg['From'] = SENDER_EMAIL
     msg['To'] = to_email
     msg['Subject'] = subject
-    
-    # Attach HTML part
-    msg.attach(MIMEText(body, "html"))  # Set MIME type to HTML
+    msg.attach(MIMEText(body, "html"))
 
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()  # Secure connection
+            server.login(SENDER_EMAIL, EMAIL_PASSWORD)
+            server.send_message(msg)
+            print("Password reset email sent successfully.")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
-    server = smtplib.SMTP('smtp.gmail.com', 587)
-    server.starttls()
-    server.login(sender, password)
-    server.send_message(msg)
-    server.quit()
+def generate_reset_token(email, expires_sec=600):
+    """
+    Generates a token for password reset, which will expire in `expires_sec` seconds.
+    """
+    s = URLSafeTimedSerializer(SECRET_KEY)
+    return s.dumps(email, salt=SECURITY_SALT)
+
+def verify_reset_token(token, max_age=600):
+    """
+    Verifies the reset token. If the token is expired or invalid, returns None.
+    """
+    s = URLSafeTimedSerializer(SECRET_KEY)
+    try:
+        email = s.loads(token, salt=SECURITY_SALT, max_age=max_age)
+    except Exception:
+        return None  # Invalid or expired token
+    return email
 
 # Simple HTML template for Reset Password Page
 reset_password_form = '''
@@ -194,6 +233,11 @@ reset_password_form = '''
             background-color: #5a67d8;
         }
 
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
         .password-requirements {
             list-style: none;
             padding-left: 0;
@@ -231,7 +275,7 @@ reset_password_form = '''
 <body>
     <div class="reset-container">
         <h2>Reset Your Password</h2>
-        <form method="POST">
+        <form id="resetForm" method="POST">
             <input type="hidden" name="email" value="{{ email }}">
             <label>New Password:</label>
             <input type="password" id="password" name="password" required>
@@ -239,7 +283,7 @@ reset_password_form = '''
             <label>Confirm Password:</label>
             <input type="password" id="confirm_password" name="confirm_password" required>
 
-            <button type="submit">Reset Password</button>
+            <button type="submit" id="submitBtn" disabled>Reset Password</button>
 
             <ul class="password-requirements">
                 <li id="length" class="invalid">
@@ -265,6 +309,7 @@ reset_password_form = '''
     <script>
         const password = document.getElementById('password');
         const confirmPassword = document.getElementById('confirm_password');
+        const submitBtn = document.getElementById('submitBtn');
         const requirements = document.querySelectorAll('.password-requirements li');
 
         function validatePassword() {
@@ -296,36 +341,54 @@ reset_password_form = '''
             } else {
                 confirmPassword.setCustomValidity('Passwords do not match');
             }
+
+            // Enable submit button if all requirements are met
+            submitBtn.disabled = !(lengthValid && uppercaseValid && specialValid && digitValid && passwordValue === confirmPassword.value);
         }
 
         password.addEventListener('input', validatePassword);
         confirmPassword.addEventListener('input', validatePassword);
+
+        // Prevent form submission if requirements aren't met
+        const form = document.getElementById('resetForm');
+        form.addEventListener('submit', function (event) {
+            if (submitBtn.disabled) {
+                event.preventDefault();
+                alert('Please make sure your password meets all the requirements.');
+            }
+        });
     </script>
 </body>
 </html>
+
 
 '''
 
 
 
-@app.route('/reset-password', methods=['GET', 'POST'])
-def reset_password():
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    email = verify_reset_token(token)
+    if not email:
+        return "Invalid or expired token. Please request a new password reset link."
+
     if request.method == 'GET':
-        email = request.args.get('email')
+        # Render the reset password form with the email passed in as context
         return render_template_string(reset_password_form, email=email)
 
     elif request.method == 'POST':
-        email = request.form.get('email')
         new_password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
 
+        # Check if passwords match
         if new_password != confirm_password:
             return "Passwords do not match. Please go back and try again."
 
-        # ✅ Hash the password before storing it
+        # Hash the new password
         hashed_password = generate_password_hash(new_password)
 
         try:
+            # Update the password in the database
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute("UPDATE teachers SET password = %s WHERE email = %s", (hashed_password, email))

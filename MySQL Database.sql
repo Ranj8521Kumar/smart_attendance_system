@@ -8,7 +8,6 @@ CREATE TABLE teachers (
     password VARCHAR(255)
 );
 
-
 select * from teachers ;
  delete from teachers where id = 5 ;
 
@@ -76,7 +75,8 @@ INSERT INTO Teacher_Subject (subject_code, teacher_id) VALUES
 ('CS311', 6);
 
 
-select * from Teacher_Subject ;
+select * from Teacher_Subject
+where teacher_id=6 ;
 
 
 CREATE TABLE Students (
@@ -156,9 +156,16 @@ CREATE TABLE Student_Subject_Enrollment (
 );
 
 
+
+
+
 show tables;
-select * from Attendance_CS101;
+select * from Attendance_CS212;
 
-ALTER TABLE Attendance_CS101
-DROP COLUMN `2025-04-22 00:00:00`;
 
+drop table Attendance_CS212;
+
+ALTER TABLE Attendance_CS212
+DROP COLUMN `22-04-2025`;
+
+SELECT * FROM Attendance_CS212 WHERE `23-04-2025` = 1;

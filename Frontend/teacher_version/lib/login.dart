@@ -16,6 +16,33 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
   String errorMessage = '';
   bool isLoading = false;
+  bool rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    loadSavedCredentials();
+  }
+
+  Future<void> loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_email');
+    final savedPassword = prefs.getString('saved_password');
+    final savedRememberMe = prefs.getBool('remember_me') ?? false;
+
+    if (savedRememberMe && savedEmail != null && savedPassword != null) {
+      setState(() {
+        emailController.text = savedEmail;
+        passwordController.text = savedPassword;
+        rememberMe = true;
+      });
+
+      // Delay to ensure widget builds before login attempt
+      Future.delayed(const Duration(milliseconds: 300), () {
+        loginTeacher();
+      });
+    }
+  }
 
   Future<void> loginTeacher() async {
     final serverUrl = dotenv.env['SERVER_URL'] ?? '';
@@ -42,7 +69,20 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200 && data['success']) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('teacher_id', data['teacher']['id'].toString());
-        Navigator.pushReplacementNamed(context, '/dashboard');
+
+        if (rememberMe) {
+          await prefs.setString('saved_email', email);
+          await prefs.setString('saved_password', password);
+          await prefs.setBool('remember_me', true);
+        } else {
+          await prefs.remove('saved_email');
+          await prefs.remove('saved_password');
+          await prefs.setBool('remember_me', false);
+        }
+
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
       } else {
         setState(() {
           errorMessage = data['message'] ?? 'Login failed. Please try again.';
@@ -80,11 +120,11 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
-            horizontal: screenWidth * 0.06, // 6% of the screen width
-            vertical: screenHeight * 0.04,  // 4% of the screen height
+            horizontal: screenWidth * 0.06,
+            vertical: screenHeight * 0.04,
           ),
           child: Container(
-            padding: EdgeInsets.all(screenWidth * 0.06), // 6% of the screen width
+            padding: EdgeInsets.all(screenWidth * 0.06),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -92,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 BoxShadow(
                   color: themeColor.withOpacity(0.3),
                   blurRadius: 20,
-                  offset: Offset(0, 10),
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
@@ -104,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text(
                   'Teacher Login',
                   style: TextStyle(
-                    fontSize: screenWidth * 0.06,  // 6% of the screen width
+                    fontSize: screenWidth * 0.06,
                     fontWeight: FontWeight.bold,
                     color: themeColor.shade700,
                   ),
@@ -122,12 +162,35 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: true,
                 ),
                 const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
-                    child: const Text("Forgot Password?"),
-                  ),
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          rememberMe = !rememberMe;
+                        });
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: rememberMe,
+                            onChanged: (value) {
+                              setState(() {
+                                rememberMe = value ?? false;
+                              });
+                            },
+                          ),
+                          const Text("Remember Me"),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
+                      child: const Text("Forgot Password?"),
+                    ),
+                  ],
                 ),
                 if (errorMessage.isNotEmpty)
                   Padding(
@@ -145,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: isLoading ? null : loginTeacher,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: themeColor,
-                      padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02), // 2% of screen height
+                      padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
