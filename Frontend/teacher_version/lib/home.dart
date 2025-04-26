@@ -3,8 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:teacher_version/attendance_record_subject_list.dart';
 import 'package:teacher_version/toggle_page.dart';
-import 'package:teacher_version/upload_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -87,11 +87,36 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Navigate to the Attendance Table Page
+  void _goToAttendanceRecordPage(String subjectCode) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubjectsListPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeColor = Colors.blueAccent;
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+
+    // Calculate font size dynamically based on screen width
+    double welcomeTextFontSize = screenWidth * 0.055;
+    double subjectsTitleFontSize = screenWidth * 0.055;
+    double listItemFontSize = screenWidth * 0.05;
+
+    // Set maximum font size limits
+    double maxWelcomeTextFontSize = 24.0;
+    double maxSubjectsTitleFontSize = 24.0;
+    double maxListItemFontSize = 20.0;
+
+    // Apply the maximum font size limits
+    welcomeTextFontSize = welcomeTextFontSize > maxWelcomeTextFontSize ? maxWelcomeTextFontSize : welcomeTextFontSize;
+    subjectsTitleFontSize = subjectsTitleFontSize > maxSubjectsTitleFontSize ? maxSubjectsTitleFontSize : subjectsTitleFontSize;
+    listItemFontSize = listItemFontSize > maxListItemFontSize ? maxListItemFontSize : listItemFontSize;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -103,9 +128,15 @@ class _HomeScreenState extends State<HomeScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onSelected: (value) {
-              if (value == 'logout') _logout();
+              if (value == 'logout') {
+                _logout();
+              } else if (value == 'attendance_record') {
+                // Handle the "Attendance Record" option
+                _goToAttendanceRecordPage(subjects.isNotEmpty ? subjects[0]['code'] ?? '' : '');
+              }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(value: 'attendance_record', child: Text('Attendance Record')),
               const PopupMenuItem(value: 'logout', child: Text('Logout')),
             ],
           ),
@@ -135,16 +166,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Welcome, $teacherName',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: screenWidth * 0.055, // 5.5% of screen width
+                    fontSize: welcomeTextFontSize,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 30),
-                const Center(
+                Center(
                   child: Text(
                     'Subjects You Teach',
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: subjectsTitleFontSize,
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
@@ -185,9 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               horizontal: screenWidth * 0.04), // 4% of screen width
                           title: Text(
                             '${subject['name']} (${subject['code']})',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 16,
+                              fontSize: listItemFontSize,
                               fontWeight: FontWeight.w600,
                             ),
                           ),

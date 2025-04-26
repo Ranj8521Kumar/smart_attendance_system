@@ -601,7 +601,7 @@ def get_attendance():
     # Input validation
     is_valid, message = validate_input(subject_code, date)
     if not is_valid:
-        return jsonify({'success': False, 'message': message}), 400
+        return jsonify({'success': False, 'message': message}), 200
 
     table_name = f"Attendance_{subject_code}"
     image_prefix = f"{subject_code}_{date}_"
@@ -613,12 +613,12 @@ def get_attendance():
         # Verify table exists
         cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
         if not cursor.fetchone():
-            return jsonify({'success': False, 'message': 'Subject not found'}), 404
+            return jsonify({'success': False, 'message': 'Subject not found'}), 200
 
         # Verify date column exists
         cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE %s", (date,))
         if not cursor.fetchone():
-            return jsonify({'success': False, 'message': 'Date not found in records'}), 404
+            return jsonify({'success': False, 'message': "Today's Attendance not found"}), 200
 
         # Get all students
         cursor.execute(f"SELECT rollno FROM {table_name}")
@@ -654,9 +654,90 @@ def get_attendance():
         if 'conn' in locals():
             conn.close()
 
+
 @app.route('/Attendance_Records/<path:filename>')
 def serve_tagged_image(filename):
     return send_from_directory('Attendance_Records', filename)
+
+
+
+
+@app.route('/get_all_attendance', methods=['GET'])
+def get_all_attendance():
+    subject_code = request.args.get('subject_code')  # Match this with the parameter name in the URL
+    app.logger.debug(f"Received request for subject_code: {subject_code}")
+    
+    # Input validation
+    if not subject_code:
+        app.logger.debug("Subject code is missing.")
+        return jsonify({'success': False, 'message': 'Subject code is required'}), 400
+
+    table_name = f"Attendance_{subject_code}"
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Verify table exists
+        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        if not cursor.fetchone():
+            app.logger.debug(f"Table {table_name} not found.")
+            return jsonify({'success': False, 'message': 'Subject not found'}), 200
+
+        # Get all students (rollno and name) by joining Attendance with Students table
+        cursor.execute(f"""
+            SELECT S.RollNo, S.Name
+            FROM {table_name} A
+            JOIN Students S ON A.rollno = S.RollNo
+        """)
+        all_students = cursor.fetchall()
+
+        # Get all dates (columns except rollno and name)
+        cursor.execute(f"SHOW COLUMNS FROM {table_name}")
+        columns = cursor.fetchall()
+        dates = [column[0] for column in columns if column[0] != 'rollno']  # Exclude rollno
+
+        # Initialize the result list
+        attendance_records = []
+
+        for student in all_students:
+            rollno, name = student
+            attendance_data = {'roll_number': rollno, 'name': name}
+            
+            # Get attendance for each date (raw 0 or 1)
+            attendance_status = []
+            for date in dates:
+                cursor.execute(f"SELECT `{date}` FROM {table_name} WHERE rollno = %s", (rollno,))
+                status = cursor.fetchone()[0]  # Get attendance status (0 or 1)
+                attendance_status.append(status)  # Directly append 0 or 1
+
+            attendance_data['attendance'] = attendance_status
+            attendance_records.append(attendance_data)
+
+        # Ensure a response is returned
+        if not attendance_records:
+            app.logger.debug("No attendance records found.")
+            return jsonify({'success': False, 'message': 'No attendance records found'}), 200
+
+        # Return both the dates and the attendance data
+        return jsonify({
+            'success': True,
+            'attendance': attendance_records,
+            'dates': dates  # Add the date vector here
+        }), 200
+
+    except mysql.connector.Error as err:
+        app.logger.error(f"Database error: {err}")
+        return jsonify({'success': False, 'message': 'Database operation failed'}), 500
+    except Exception as e:
+        app.logger.error(f"Unexpected error: {e}")
+        return jsonify({'success': False, 'message': 'Server processing error'}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
         
 if __name__ == '__main__':
     # Start background processor

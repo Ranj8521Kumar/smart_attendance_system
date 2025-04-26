@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart'; // For ListEquality
+import 'package:collection/collection.dart';
 
 class TodaysAttendancePage extends StatefulWidget {
   final String subjectCode;
@@ -24,14 +24,13 @@ class _TodaysAttendancePageState extends State<TodaysAttendancePage> {
   List<String> presentStudents = [];
   List<String> allStudents = [];
   List<String> taggedImages = [];
-  List<String> previousTaggedImages = [];  // Track previously loaded images
+  List<String> previousTaggedImages = [];
   String searchQuery = '';
   bool isLoading = false;
   String? errorMessage;
-
-  bool hasFetchedData = false; // Flag to prevent multiple fetch calls
-
   Timer? _debounce;
+
+  bool hasFetchedData = false;
 
   String get formattedDate => DateTime.now()
       .toString()
@@ -57,49 +56,47 @@ class _TodaysAttendancePageState extends State<TodaysAttendancePage> {
       }
 
       final data = json.decode(response.body);
-      if (!data['success']) {
+      if (data['success'] != true) {
         throw Exception(data['message'] ?? 'Failed to fetch attendance');
       }
 
-      // Only update the images if there are new images from the server
       List<String> newTaggedImages = List<String>.from(data['tagged_images'] ?? []);
+
       if (!ListEquality().equals(newTaggedImages, previousTaggedImages)) {
         setState(() {
           presentStudents = List<String>.from(data['data'] ?? []);
           allStudents = List<String>.from(data['all'] ?? []);
-          taggedImages = newTaggedImages; // Update with new images
+          taggedImages = newTaggedImages;
+          previousTaggedImages = newTaggedImages;
         });
-
-        // Update the previous image list
-        previousTaggedImages = newTaggedImages;
       }
 
-      hasFetchedData = true; // Mark as fetched
-    } on http.ClientException catch (e) {
-      setState(() => errorMessage = 'Network error: ${e.message}');
+      hasFetchedData = true;
     } on TimeoutException {
-      setState(() => errorMessage = 'Request timed out');
+      setState(() => errorMessage = 'Request timed out. Please try again.');
     } catch (e) {
-      setState(() => errorMessage = e.toString());
+      // Handle different types of exceptions more gracefully
+      String errorStr = e.toString();
+      if (e is Exception) {
+        // If it's an exception, get the error message without the "Exception:" prefix
+        errorStr = errorStr.replaceAll('Exception:', '').trim();
+      }
+      setState(() => errorMessage = errorStr);
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  // Pull-to-refresh handler
+
   Future<void> _onRefresh() async {
-    setState(() {
-      hasFetchedData = false;  // Reset fetched data flag to refetch
-    });
+    setState(() => hasFetchedData = false);
     await fetchAttendance();
   }
 
   void onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      setState(() {
-        searchQuery = query;
-      });
+      setState(() => searchQuery = query);
     });
   }
 
@@ -117,7 +114,13 @@ class _TodaysAttendancePageState extends State<TodaysAttendancePage> {
   @override
   void initState() {
     super.initState();
-    fetchAttendance(); // Fetch attendance when the page is first loaded
+    fetchAttendance();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
   }
 
   @override
@@ -127,32 +130,44 @@ class _TodaysAttendancePageState extends State<TodaysAttendancePage> {
     return Scaffold(
       backgroundColor: Colors.blue.shade50,
       body: RefreshIndicator(
-        onRefresh: _onRefresh,  // Pull-to-refresh functionality
-        child: Column(
+        onRefresh: _onRefresh,
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : errorMessage != null
+            ? Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              errorMessage!,
+              style: const TextStyle(
+                fontSize: 20,
+                color: Colors.black,  // Set text color to black
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        )
+            : Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: TextField(
                 decoration: const InputDecoration(
                   hintText: 'Search Roll Number',
                   prefixIcon: Icon(Icons.search),
                   border: OutlineInputBorder(),
                 ),
-                onChanged: onSearchChanged, // Debounced search
+                onChanged: onSearchChanged,
               ),
             ),
-            if (errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  errorMessage!,
-                  style: const TextStyle(color: Colors.red, fontSize: 16),
-                ),
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildSummaryCards(),
+            ),
+            const SizedBox(height: 8),
             Expanded(
-              child: isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : CustomScrollView(
+              child: CustomScrollView(
                 slivers: [
                   _buildStudentSliverSection(
                     'Present Students',
@@ -165,72 +180,55 @@ class _TodaysAttendancePageState extends State<TodaysAttendancePage> {
                     Colors.red,
                   ),
                   if (taggedImages.isNotEmpty)
-                    SliverPadding(
-                      padding: const EdgeInsets.all(16),
-                      sliver: SliverToBoxAdapter(
-                        child: Text(
-                          'Tagged Images',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.indigo[700],
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (taggedImages.isNotEmpty)
-                    SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 1,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.8,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                          final imageName = taggedImages[index];
-                          final imgUrl = '$imageBaseUrl/Attendance_Records/$imageName';
-                          print('🖼️ Loading image: $imgUrl'); // Debug print
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: GestureDetector(
-                                onTap: () {
-                                  // Navigate to Full-Screen Image Page
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => FullScreenImagePage(imageUrl: imgUrl),
-                                    ),
-                                  );
-                                },
-                                child: InteractiveViewer(
-                                  panEnabled: true,
-                                  minScale: 0.8,
-                                  maxScale: 3.0,
-                                  child: CachedNetworkImage(
-                                    imageUrl: imgUrl,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) => const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
-                                      color: Colors.grey[200],
-                                      child: const Center(
-                                        child: Icon(Icons.error, color: Colors.red),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        childCount: taggedImages.length,
-                      ),
-                    ),
+                    _buildTaggedImagesSection(imageBaseUrl),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCards() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _buildSummaryCard('Total', allStudents.length, Colors.blue),
+        _buildSummaryCard('Present', presentStudents.length, Colors.green),
+        _buildSummaryCard('Absent', absentStudents.length, Colors.red),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCard(String title, int count, Color color) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              count.toString(),
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
               ),
             ),
           ],
@@ -287,6 +285,75 @@ class _TodaysAttendancePageState extends State<TodaysAttendancePage> {
       ),
     );
   }
+
+  Widget _buildTaggedImagesSection(String baseUrl) {
+    return SliverList(
+      delegate: SliverChildListDelegate(
+        [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Tagged Images',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo[700],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 1,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.8,
+              ),
+              itemCount: taggedImages.length,
+              itemBuilder: (context, index) {
+                final imgName = taggedImages[index];
+                final imgUrl = '$baseUrl/Attendance_Records/$imgName';
+
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FullScreenImagePage(imageUrl: imgUrl),
+                        ),
+                      );
+                    },
+                    child: InteractiveViewer(
+                      panEnabled: true,
+                      minScale: 0.8,
+                      maxScale: 3.0,
+                      child: CachedNetworkImage(
+                        imageUrl: imgUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: Icon(Icons.error, color: Colors.red),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class FullScreenImagePage extends StatelessWidget {
@@ -300,18 +367,16 @@ class FullScreenImagePage extends StatelessWidget {
       backgroundColor: Colors.black,
       body: Center(
         child: InteractiveViewer(
-          panEnabled: true, // Allow panning
-          minScale: 0.8,    // Minimum zoom scale
-          maxScale: 100.0,    // Maximum zoom scale
+          panEnabled: true,
+          minScale: 0.8,
+          maxScale: 100.0,
           child: CachedNetworkImage(
             imageUrl: imageUrl,
             fit: BoxFit.contain,
             placeholder: (context, url) => const Center(
               child: CircularProgressIndicator(),
             ),
-            errorWidget: (context, url, error) => const Center(
-              child: Icon(Icons.error, color: Colors.red),
-            ),
+            errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.red),
           ),
         ),
       ),
