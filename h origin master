@@ -1,0 +1,143 @@
+* [33mcommit 4b6e8ea9c9d6a044b44570565eefece072a68cc7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m
+[31m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[31m|[m Date:   Tue Apr 29 20:32:31 2025 +0530
+[31m|[m 
+[31m|[m     added a functionality to send email if student is present
+[31m|[m     
+[31m|[m *   [33mcommit 9553d970b460eda659ec330c99fb49ac6616faf9[m[33m ([m[1;31morigin/master[m[33m)[m
+[31m|[m [32m|[m[33m\[m  Merge: 6f6313e 13ebb35
+[31m|[m [32m|[m [33m|[m Author: Naresh Jangir <nareshjangir6184@gmail.com>
+[31m|[m [32m|[m [33m|[m Date:   Tue Apr 29 17:32:31 2025 +0530
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m [33m|[m     Merge pull request #2 from Ranj8521Kumar/master
+[31m|[m [32m|[m [33m|[m     
+[31m|[m [32m|[m [33m|[m     Web app
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m * [33mcommit 13ebb3582c52d4f36c219652fea7013b62fad0fc[m
+[31m|[m [32m|[m [33m|[m Author: Pandit <22it3037@rgipt.ac.in>
+[31m|[m [32m|[m [33m|[m Date:   Tue Apr 29 15:58:56 2025 +0530
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m [33m|[m     Changing css for Looking Good our Dashboard Page
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m * [33mcommit 750e2aeb969e66af5a503e5ca23d7c52e1470af4[m
+[31m|[m [32m|[m [33m|[m Author: Pandit <22it3037@rgipt.ac.in>
+[31m|[m [32m|[m [33m|[m Date:   Tue Apr 29 15:20:23 2025 +0530
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m [33m|[m     Adjust our attendence graph for only view in landing viewPort
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m * [33mcommit def52b81bbfc2a3d6d2c4b82a36e8b4562a159b1[m
+[31m|[m [32m|[m [33m|[m Author: Pandit <22it3037@rgipt.ac.in>
+[31m|[m [32m|[m [33m|[m Date:   Tue Apr 29 14:53:17 2025 +0530
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m [33m|[m     Added web App for Our Project
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m * [33mcommit 97bbaaf142f542ab5b075416fe2bc3a75ec05797[m
+[31m|[m [32m|[m [33m|[m Author: Pandit <22it3037@rgipt.ac.in>
+[31m|[m [32m|[m [33m|[m Date:   Tue Apr 29 14:43:56 2025 +0530
+[31m|[m [32m|[m [33m|[m 
+[31m|[m [32m|[m [33m|[m     added Web App for Our Project
+[31m|[m [32m|[m [33m|[m 
+[31m|[m * [33m|[m [33mcommit 6f6313e8a7c80176d50811cebee662866960d507[m
+[31m|[m[31m/[m[33m|[m [33m|[m Merge: 5614e36 d0a0c06
+[31m|[m [33m|[m[33m/[m  Author: Naresh Jangir <nareshjangir6184@gmail.com>
+[31m|[m [33m|[m   Date:   Tue Apr 29 14:33:31 2025 +0530
+[31m|[m [33m|[m   
+[31m|[m [33m|[m       Merge pull request #1 from Ranj8521Kumar/master
+[31m|[m [33m|[m       
+[31m|[m [33m|[m       README.md file added
+[31m|[m [33m|[m 
+[31m|[m * [33mcommit d0a0c06806cf99273214f5ca1a29e4e33c0cc988[m
+[31m|[m[31m/[m  Author: Pandit <22it3037@rgipt.ac.in>
+[31m|[m   Date:   Tue Apr 29 14:31:27 2025 +0530
+[31m|[m   
+[31m|[m       README.md file added
+[31m|[m 
+* [33mcommit 5614e36bcda08e20b2fca088cc49ce938eddb94c[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Sun Apr 27 01:28:05 2025 +0530
+[35m|[m 
+[35m|[m     made a new page to see attendance record
+[35m|[m 
+* [33mcommit 6143639102fdca17cf33f35213b59e023797dbe4[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Thu Apr 24 21:53:29 2025 +0530
+[35m|[m 
+[35m|[m     added security to login & reset password and added remember me functionality
+[35m|[m 
+* [33mcommit 411a0aef126c887cfff6fd64ffb61256d8cb66c6[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Thu Apr 24 16:59:43 2025 +0530
+[35m|[m 
+[35m|[m     updated .gitignore to exclude unnecessary files
+[35m|[m 
+* [33mcommit f686d5c6f9b71045c4dfe39260f84bf092868dee[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Thu Apr 24 16:57:57 2025 +0530
+[35m|[m 
+[35m|[m     Image displaying problem solved on Today's attendance page
+[35m|[m 
+* [33mcommit d08a5131c70ec036548f239282df6370481ec563[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Thu Apr 24 00:26:55 2025 +0530
+[35m|[m 
+[35m|[m     fetched current day  attendance list and images from server
+[35m|[m 
+* [33mcommit 04e4a589346dbdd589edfccd93acaf369dc55ed1[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Tue Apr 22 18:07:09 2025 +0530
+[35m|[m 
+[35m|[m     wrote python scripts to make tables and to update attendance tables
+[35m|[m 
+* [33mcommit ff59ed9baa9bb7f5e2aba29ed196a1f366953a0d[m
+[35m|[m Author: Naresh Jangir <nareshjangir6184@gmail.com>
+[35m|[m Date:   Tue Apr 22 00:28:20 2025 +0530
+[35m|[m 
+[35m|[m     Delete Backend/Attendance_Records directory
+[35m|[m 
+* [33mcommit d3047e10f0a75aa72a1d289c1b9d432f4468afdd[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Tue Apr 22 00:26:04 2025 +0530
+[35m|[m 
+[35m|[m     Saving the image with tagging instead of normal for record
+[35m|[m 
+* [33mcommit 0acaa40f4d863d528f32208a6372e3a0a9a61265[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Mon Apr 21 23:57:04 2025 +0530
+[35m|[m 
+[35m|[m     Race condtion problem solved
+[35m|[m 
+* [33mcommit 879dac4dfc5bf7df661e3bf63f7cd88cedce8792[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Mon Apr 21 02:20:12 2025 +0530
+[35m|[m 
+[35m|[m     Added upload image functionality , logic for image recognition
+[35m|[m 
+* [33mcommit 989f0df57f0c755836e0c1ba89eced1ce77a0f3a[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Sun Apr 20 22:15:54 2025 +0530
+[35m|[m 
+[35m|[m     Added functionality to fetch teacher's data from database ,updated HomePage , and made Upload image page
+[35m|[m 
+* [33mcommit 8d56e8528558e063261fe1dc5c96d62183ac9aeb[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Sat Apr 19 21:32:42 2025 +0530
+[35m|[m 
+[35m|[m     webpage added to reset password and logic set in backend.py
+[35m|[m 
+* [33mcommit 95edc0a93216ba78eaac40a43f42a96502414bc9[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Sat Apr 19 20:59:25 2025 +0530
+[35m|[m 
+[35m|[m     Fotgot_Password page added
+[35m|[m 
+* [33mcommit f62787ff6f4d08be6ec2708aabc9157b63672d3c[m
+[35m|[m Author: naresh6184 <nareshjangir6184@gmail.com>
+[35m|[m Date:   Fri Apr 18 16:01:37 2025 +0530
+[35m|[m 
+[35m|[m     Login verification applied and dummy home page added
+[35m|[m 
+* [33mcommit 8c1cabbfe4d5ba17bff320c94d166f07277f37e5[m
+  Author: naresh6184 <nareshjangir6184@gmail.com>
+  Date:   Fri Apr 18 11:52:30 2025 +0530
+  
+      first commit : Started the project

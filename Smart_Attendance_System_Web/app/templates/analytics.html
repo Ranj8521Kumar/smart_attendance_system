@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Analytics - Smart Attendance System{% endblock %}
+
+{% block content %}
+<div class="row mt-2">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-0">
+            <h2>Analytics Page</h2>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">Logout</a>
+        </div>
+        
+        <!-- Filters Section -->
+        <div class="card mb-0">
+            <div class="card-header">
+                <h4>Filters:</h4>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('analytics.filter_analytics') }}" method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="batch" class="form-label">Batch:</label>
+                        <select class="form-select" id="batch" name="batch">
+                            <option value="">All Batches</option>
+                            {% for batch in batches %}
+                                <option value="{{ batch }}" {% if active_filters.get('batch') == batch %}selected{% endif %}>{{ batch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="branch" class="form-label">Branch:</label>
+                        <select class="form-select" id="branch" name="branch">
+                            <option value="">All Branches</option>
+                            {% for branch in branches %}
+                                <option value="{{ branch }}" {% if active_filters.get('branch') == branch %}selected{% endif %}>{{ branch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="subject" class="form-label">Subject:</label>
+                        <select class="form-select" id="subject" name="subject">
+                            <option value="">All Subjects</option>
+                            {% for subject in subjects %}
+                                <option value="{{ subject.sub_code }}" {% if active_filters.get('subject') == subject.sub_code %}selected{% endif %}>{{ subject.sub_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Chart Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Batch-wise Attendance Percentage</h4>
+            </div>
+            <div class="card-body chart-container">
+                <canvas id="batchChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Data Table Section -->
+        <div class="card">
+            <div class="card-header">
+                <h4>{{ active_filters.get('batch', 'All') }} (Total No. of Students)</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Batch</th>
+                                <th>Total Students</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for batch in batch_data %}
+                            <tr>
+                                <td>{{ batch.Batch }}</td>
+                                <td>{{ batch.total_students }}</td>
+                                <td>{{ "%.1f"|format(batch.percentage) }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get batch data from the server
+        const batchData = JSON.parse('{{ batch_data|tojson|safe }}');
+        
+        // Prepare data for Chart.js
+        const labels = batchData.map(item => item.Batch);
+        const percentages = batchData.map(item => item.percentage);
+        
+        // Create the chart
+        const ctx = document.getElementById('batchChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Percentage of Students',
+                    data: percentages,
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,  // This is important to allow custom height
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Percentage'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Batches'
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
