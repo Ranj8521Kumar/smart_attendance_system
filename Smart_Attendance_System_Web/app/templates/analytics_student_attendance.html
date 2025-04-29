@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Attendance - Smart Attendance System{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Analytics Page</h2>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">Logout</a>
+        </div>
+        
+        <!-- Filters Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Filters:</h4>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('analytics.filter_analytics') }}" method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="batch" class="form-label">Batch:</label>
+                        <select class="form-select" id="batch" name="batch">
+                            <option value="">All Batches</option>
+                            {% for batch in batches %}
+                                <option value="{{ batch }}" {% if active_filters.get('batch') == batch %}selected{% endif %}>{{ batch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="branch" class="form-label">Branch:</label>
+                        <select class="form-select" id="branch" name="branch">
+                            <option value="">All Branches</option>
+                            {% for branch in branches %}
+                                <option value="{{ branch }}" {% if active_filters.get('branch') == branch %}selected{% endif %}>{{ branch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="subject" class="form-label">Subject:</label>
+                        <select class="form-select" id="subject" name="subject">
+                            <option value="">All Subjects</option>
+                            {% for subject in subjects %}
+                                <option value="{{ subject.sub_code }}" {% if active_filters.get('subject') == subject.sub_code %}selected{% endif %}>{{ subject.sub_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Chart Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Student Attendance for {{ active_filters.get('batch') }} - {{ active_filters.get('branch') }} - {{ active_filters.get('subject') }}</h4>
+            </div>
+            <div class="card-body">
+                <canvas id="attendanceChart" height="300"></canvas>
+            </div>
+        </div>
+        
+        <!-- Data Table Section -->
+        <div class="card">
+            <div class="card-header">
+                <h4>Attendance Details</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Roll No</th>
+                                {% for date in attendance_data.dates %}
+                                <th>{{ date }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in attendance_data.attendance %}
+                            <tr>
+                                <td>{{ student.rollno }}</td>
+                                {% for date in attendance_data.dates %}
+                                <td>{{ student[date] }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get attendance data from the server
+        const attendanceData = {{ attendance_data|tojson }};
+        
+        // Calculate attendance percentage for each student
+        const students = attendanceData.attendance.map(student => student.rollno);
+        const percentages = attendanceData.attendance.map(student => {
+            let present = 0;
+            let total = attendanceData.dates.length;
+            
+            attendanceData.dates.forEach(date => {
+                if (student[date] === 1) {
+                    present++;
+                }
+            });
+            
+            return (present / total) * 100;
+        });
+        
+        // Create the chart
+        const ctx = document.getElementById('attendanceChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: students,
+                datasets: [{
+                    label: 'Attendance Percentage',
+                    data: percentages,
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Percentage'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Roll Numbers'
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
