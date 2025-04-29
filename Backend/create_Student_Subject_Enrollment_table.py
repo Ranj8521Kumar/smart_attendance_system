@@ -1,4 +1,4 @@
-import mysql.connector
+from backend import get_db_connection
 import os
 import openpyxl
 from dotenv import load_dotenv
@@ -32,12 +32,7 @@ def read_rollnos_from_file(filepath):
 def create_student_subject_enrollment_for_batch(filepath, subject_codes):
     rollnos = read_rollnos_from_file(filepath)
 
-    conn = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
-    )
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     # Get valid rollnos from Students table

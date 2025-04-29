@@ -11,34 +11,36 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
 
-def handle_attendance_update(recognized, subject_code, current_date):
+# MySQL Connection using env variables
+def get_db_connection():
+    return mysql.connector.connect(
+        host=os.getenv('DB_HOST'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        database=os.getenv('DB_NAME')
+    )
+
+def create_date_column_if_not_exists(subject_code, current_date):
     """
-    Updates the attendance for recognized students. Adds column if missing.
-    Marks 1 for present, 0 for absent.
+    Checks if the date column exists in the attendance table.
+    If it doesn't, it creates the column and sets all values to 0 (absent).
     """
 
     # Convert current_date (string) to a datetime object
-    current_date = datetime.strptime(current_date, '%d-%m-%Y')  # assuming input date format is 'yyyy-mm-dd'
-    
-    # Format the date as 'dd-mm-yyyy' for column name
+    current_date = datetime.strptime(current_date, '%d-%m-%Y')
     formatted_date = current_date.strftime('%d-%m-%Y')
 
     # Connect to the MySQL database
-    conn = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
-    )
-    cursor = conn.cursor()
-
-    table_name = f"attendance_{subject_code}"
-
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        table_name = f"attendance_{subject_code}"
+
         # Check if table exists
         cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
         if not cursor.fetchone():
-            print(f"[ERROR] Attendance table for {subject_code} does not exist. Skipping attendance update.")
+            print(f"[ERROR] Attendance table for {subject_code} does not exist. Skipping column creation.")
             return
 
         # Check if date column exists
@@ -54,10 +56,44 @@ def handle_attendance_update(recognized, subject_code, current_date):
             cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN `{formatted_date}` TINYINT DEFAULT 0")
             print(f"[INFO] Created new date column `{formatted_date}` in {table_name}.")
 
-        # Fetch all roll numbers from the table
-        cursor.execute(f"SELECT rollno FROM {table_name}")
-        all_students = {row[0] for row in cursor.fetchall()}
-        recognized_set = set(recognized)
+            # Set all values in this column to 0 (absent)
+            cursor.execute(f"UPDATE {table_name} SET `{formatted_date}` = 0")
+            print(f"[INFO] Set all attendance records for `{formatted_date}` to 0 (absent).")
+
+        # Commit changes
+        conn.commit()
+
+    except mysql.connector.Error as err:
+        print(f"[ERROR] MySQL Error: {str(err)}")
+    except Exception as e:
+        print(f"[ERROR] Error in creating date column: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+def update_attendance(recognized, subject_code, current_date):
+    """
+    Marks the attendance of recognized students as present (1) for the specified subject and date.
+    """
+
+    # Convert current_date (string) to a datetime object
+    current_date = datetime.strptime(current_date, '%d-%m-%Y')
+    formatted_date = current_date.strftime('%d-%m-%Y')
+
+    # Connect to the MySQL database
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        table_name = f"attendance_{subject_code}"
+
+        # Check if table exists
+        cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+        if not cursor.fetchone():
+            print(f"[ERROR] Attendance table for {subject_code} does not exist. Skipping attendance update.")
+            return
 
         # Update attendance for recognized students
         for rollno in recognized:
@@ -86,8 +122,12 @@ def handle_attendance_update(recognized, subject_code, current_date):
         # Commit changes
         conn.commit()
 
+    except mysql.connector.Error as err:
+        print(f"[ERROR] MySQL Error: {str(err)}")
     except Exception as e:
-        print(f"[ERROR] Error in attendance update: {str(e)}")
+        print(f"[ERROR] Error in updating attendance: {str(e)}")
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

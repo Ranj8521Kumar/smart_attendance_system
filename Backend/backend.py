@@ -16,7 +16,7 @@ import uuid
 import threading
 import time
 import cv2
-from attendance_update import handle_attendance_update
+from attendance_update import update_attendance ,create_date_column_if_not_exists
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import re
@@ -129,7 +129,7 @@ def send_reset_email(to_email):
             <p>Hi,</p>
             <p>You requested a password reset for your Smart Attendance account.</p>
             <p>Click the link below to <a href="{reset_link}">Reset your password</a>.</p>
-            <p>This link will expire in 1 hour for your security.</p>
+            <p>This link will expire in 10 minutes for your security.</p>
             <p>If you didn’t request this, please ignore this email.</p>
             <p>Regards,<br>Smart Attendance Team</p>
         </body>
@@ -559,14 +559,26 @@ def background_image_processor():
                         os.makedirs(os.path.dirname(attendance_path), exist_ok=True)
                         cv2.imwrite(attendance_path, tagged_image)
 
-                        # Handle attendance update
+                        # Extract subject and date from the filename
                         subject_code = extract_subject_from_filename(filename)  # Assume a method to extract subject from filename
                         current_date = datetime.today().strftime('%d-%m-%Y')   # Change date format to ddmmyyyy
+
                         print(f"Subject Code = {subject_code}")
                         print(f"Date = {current_date}")
-                        handle_attendance_update(recognized, subject_code, current_date)
 
-                        # Delete original image
+                        # Check if students are already marked present for the given subject and date
+                        for rollno in recognized:
+                            # Ensure that the date column exists before proceeding
+                            create_date_column_if_not_exists(subject_code, current_date)
+
+                            # Check if the student is already marked present
+                            if not is_student_present(rollno, subject_code, current_date):
+                                # Send attendance confirmation email asynchronously
+                                send_attendance_emails_async([rollno], subject_code, current_date)
+                                # Handle attendance update if not already marked present
+                                update_attendance([rollno], subject_code, current_date)
+
+                        # Delete original image after processing
                         os.remove(current_file)
 
                         print(f"[DONE] Processed {os.path.basename(current_file)}. Recognized: {recognized}")
@@ -584,6 +596,31 @@ def background_image_processor():
             print(f"[PROCESSOR ERROR] {str(e)}")
             time.sleep(5)
 
+def is_student_present(rollno, subject_code, date):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        table_name = f"attendance_{subject_code}"  # Dynamically create the table name based on subject code
+
+        cursor.execute(f"SELECT 1 FROM `{table_name}` WHERE rollno = %s AND `{date}` = 1", (rollno,))
+        attendance_exists = cursor.fetchone()
+
+        if attendance_exists:
+            print(f"[INFO] {rollno} is already marked present for {subject_code} on {date}.")
+            return True
+        else:
+            return False
+
+    except mysql.connector.Error as err:
+        print(f"Error checking attendance for {rollno}: {err}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 
 def validate_input(subject_code, date):
     """Validate subject code and date format"""
@@ -592,6 +629,95 @@ def validate_input(subject_code, date):
     if not re.match(r'^\d{2}-\d{2}-\d{4}$', date):
         return False, "Invalid date format (dd-mm-yyyy)"
     return True, ""
+
+
+
+def send_attendance_email(rollno, subject_code, date):
+    # Establish database connection
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Fetch student name from students table
+        cursor.execute("SELECT Name FROM students WHERE RollNo = %s", (rollno,))
+        student_name_result = cursor.fetchone()
+        if student_name_result:
+            student_name = student_name_result[0]
+        else:
+            print(f"Student with rollno {rollno} not found.")
+            return
+
+        # Fetch subject name from subjects table
+        cursor.execute("SELECT sub_name FROM subjects WHERE sub_code = %s", (subject_code,))
+        subject_name_result = cursor.fetchone()
+        if subject_name_result:
+            subject_name = subject_name_result[0]
+        else:
+            print(f"Subject with code {subject_code} not found.")
+            return
+
+        # Check if the student has already been marked present for this subject on this date
+        table_name = f"attendance_{subject_code}"  # Dynamically create the table name based on subject code
+
+        # We use the table name as part of the query, so we use it as a formatted string
+        cursor.execute(f"SELECT 1 FROM `{table_name}` WHERE rollno = %s AND `{date}` = 1", (rollno,))
+        attendance_exists = cursor.fetchone()
+
+        if attendance_exists:
+            print(f"[INFO] {rollno} was already marked present for {subject_name} on {date}.")
+            return  # Skip sending the email if the student is already marked present
+
+    except mysql.connector.Error as err:
+        print(f"Error fetching data from database: {err}")
+        return
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+    # Prepare email content
+    to_email = f"{rollno}@rgipt.ac.in"
+    subject = f"Attendance Confirmation for {subject_name} - {date}"
+
+    # 📧 HTML email body
+    body = f"""
+    <html>
+        <body>
+            <p>Dear {student_name},</p>
+            <p>You have been marked <strong>present</strong> for the course <strong>{subject_name}</strong> on <strong>{date}</strong>.</p>
+            <p>No action is required on your part.</p>
+            <p>If you believe this is incorrect, please contact your course instructor.</p>
+            <p>Regards,<br>Smart Attendance Team</p>
+        </body>
+    </html>
+    """
+
+    # Sending email
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, "html"))
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, EMAIL_PASSWORD)
+            server.send_message(msg)
+            print(f"[EMAIL SENT] to {to_email}")
+
+    except Exception as e:
+        print(f"[EMAIL ERROR] Could not send to {to_email}: {str(e)}")
+
+
+def send_attendance_emails_async(present_students, subject_code, date):
+    def task():
+        for rollno in present_students:
+            send_attendance_email(rollno, subject_code, date)
+    threading.Thread(target=task).start()
+    
+
 
 @app.route('/get_attendance', methods=['GET'])
 def get_attendance():
@@ -627,6 +753,7 @@ def get_attendance():
         # Get present students
         cursor.execute(f"SELECT rollno FROM {table_name} WHERE `{date}` = 1")
         present_students = [row[0] for row in cursor.fetchall()]
+        
 
         # Get tagged images
         image_folder = 'Attendance_Records'
