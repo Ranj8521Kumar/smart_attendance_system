@@ -56,8 +56,8 @@
             <div class="card-header">
                 <h4>Batch-wise Attendance Percentage</h4>
             </div>
-            <div class="card-body">
-                <canvas id="batchChart" height="300"></canvas>
+            <div class="card-body chart-container">
+                <canvas id="batchChart"></canvas>
             </div>
         </div>
         
@@ -97,7 +97,7 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Get batch data from the server
-        const batchData = {{ batch_data|tojson }};
+        const batchData = JSON.parse('{{ batch_data|tojson|safe }}');
         
         // Prepare data for Chart.js
         const labels = batchData.map(item => item.Batch);
@@ -119,6 +119,7 @@
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,  // This is important to allow custom height
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -140,3 +141,6 @@
     });
 </script>
 {% endblock %}
+
+
+
