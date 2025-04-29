@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Subject Analytics - Smart Attendance System{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Analytics Page</h2>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">Logout</a>
+        </div>
+        
+        <!-- Filters Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Filters:</h4>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('analytics.filter_analytics') }}" method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="batch" class="form-label">Batch:</label>
+                        <select class="form-select" id="batch" name="batch">
+                            <option value="">All Batches</option>
+                            {% for batch in batches %}
+                                <option value="{{ batch }}" {% if active_filters.get('batch') == batch %}selected{% endif %}>{{ batch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="branch" class="form-label">Branch:</label>
+                        <select class="form-select" id="branch" name="branch">
+                            <option value="">All Branches</option>
+                            {% for branch in branches %}
+                                <option value="{{ branch }}" {% if active_filters.get('branch') == branch %}selected{% endif %}>{{ branch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="subject" class="form-label">Subject:</label>
+                        <select class="form-select" id="subject" name="subject">
+                            <option value="">All Subjects</option>
+                            {% for subject in subjects %}
+                                <option value="{{ subject.sub_code }}" {% if active_filters.get('subject') == subject.sub_code %}selected{% endif %}>{{ subject.sub_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Chart Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Subject-wise Attendance Percentage for {{ active_filters.get('batch') }} - {{ active_filters.get('branch') }}</h4>
+            </div>
+            <div class="card-body">
+                <canvas id="subjectChart" height="300"></canvas>
+            </div>
+        </div>
+        
+        <!-- Data Table Section -->
+        <div class="card">
+            <div class="card-header">
+                <h4>{{ active_filters.get('batch') }} (Total No. of Students)</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th>Enrolled Students</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for subject in subject_data %}
+                            <tr>
+                                <td>{{ subject.sub_code }}</td>
+                                <td>{{ subject.sub_name }}</td>
+                                <td>{{ subject.enrolled_students }}</td>
+                                <td>{{ "%.1f"|format(subject.percentage) }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get subject data from the server
+        const subjectData = {{ subject_data|tojson }};
+        
+        // Prepare data for Chart.js
+        const labels = subjectData.map(item => item.sub_code);
+        const percentages = subjectData.map(item => item.percentage);
+        
+        // Create the chart
+        const ctx = document.getElementById('subjectChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Percentage of Enrolled Students',
+                    data: percentages,
+                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Percentage'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Subjects'
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
